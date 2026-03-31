@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 # -------------------------------
 # Page Config
 # -------------------------------
-st.set_page_config(page_title="Thought Process Engine", layout="wide")
+st.set_page_config(page_title="Thought Process Reconstruction Engine", layout="wide")
 
 st.title("🧠 Thought Process Reconstruction Engine")
 st.markdown("### Modeling student reasoning beyond final answers")
@@ -25,7 +25,7 @@ correct_answer = "42"
 # -------------------------------
 # Sidebar Input
 # -------------------------------
-st.sidebar.header("📥 Enter Student Data")
+st.sidebar.header("📥 Enter / Edit Student Data")
 
 student_name = st.sidebar.text_input("Student Name")
 
@@ -82,86 +82,105 @@ def analyze(student_steps, correct_steps, student_answer, correct_answer):
 
 
 # -------------------------------
-# Store Data
+# Initialize session state
 # -------------------------------
 if "data" not in st.session_state:
     st.session_state.data = []
 
-# -------------------------------
-# Run Analysis
-# -------------------------------
-if st.sidebar.button("Analyze Student"):
+if "edit_index" not in st.session_state:
+    st.session_state.edit_index = None
 
-    category, emoji, confidence = analyze(
-        steps, correct_steps, student_answer, correct_answer
-    )
-
-    st.session_state.data.append({
+# -------------------------------
+# Add / Edit Student
+# -------------------------------
+if st.sidebar.button(" Add / Update Student"):
+    category, emoji, confidence = analyze(steps, correct_steps, student_answer, correct_answer)
+    
+    student_record = {
         "Name": student_name,
+        "Steps": steps,
+        "Final Answer": student_answer,
+        "Time": time_taken,
         "Category": category,
-        "Confidence": confidence,
-        "Time": time_taken
-    })
+        "Confidence": confidence
+    }
 
-    st.success(f"{emoji} {student_name} classified as: {category}")
-    st.info(f"Confidence Score: {confidence}")
+    if st.session_state.edit_index is not None:
+        st.session_state.data[st.session_state.edit_index] = student_record
+        st.session_state.edit_index = None
+        st.success(f" Student {student_name} updated")
+    else:
+        st.session_state.data.append(student_record)
+        st.success(f"{emoji} {student_name} classified as: {category} (Confidence: {confidence})")
 
 # -------------------------------
-# Display Results
+# Clear all data
+# -------------------------------
+if st.sidebar.button("🗑️ Clear All Data"):
+    st.session_state.data = []
+    st.session_state.edit_index = None
+    st.experimental_rerun()
+
+# -------------------------------
+# Display Student Data
 # -------------------------------
 if st.session_state.data:
-
+    st.subheader(" Student Analysis Data")
+    
     df = pd.DataFrame(st.session_state.data)
-
-    st.subheader("Student Analysis Data")
-    st.dataframe(df)
-
+    
+    # Edit and Delete buttons
+    for i, row in df.iterrows():
+        col1, col2, col3, col4, col5, col6 = st.columns([2,2,2,2,1,1])
+        col1.write(row["Name"])
+        col2.write(row["Category"])
+        col3.write(row["Confidence"])
+        col4.write(row["Time"])
+        col5.button("✏️", key=f"edit_{i}", on_click=lambda i=i: edit_student(i))
+        col6.button("❌", key=f"delete_{i}", on_click=lambda i=i: delete_student(i))
+    
+    # Visualization
+  
     col1, col2 = st.columns(2)
-
-    # -------------------------------
-    # Pie Chart
-    # -------------------------------
+    
     with col1:
         st.subheader(" Thinking Pattern Distribution")
         counts = df["Category"].value_counts()
         fig, ax = plt.subplots()
         ax.pie(counts, labels=counts.index, autopct='%1.1f%%')
         st.pyplot(fig)
-
-    # -------------------------------
-    # Time vs Confidence
-    # -------------------------------
+        
     with col2:
-        st.subheader("⏱️ Time vs Confidence")
+        st.subheader(" Time vs Confidence")
         fig2, ax2 = plt.subplots()
         ax2.scatter(df["Time"], df["Confidence"])
         ax2.set_xlabel("Time (minutes)")
         ax2.set_ylabel("Confidence")
         st.pyplot(fig2)
+    
 
-    # -------------------------------
-    # Insights
-    # -------------------------------
-    st.subheader(" Key Insights")
+    # Download CSV
+   
+    csv = df.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="💾 Download Data as CSV",
+        data=csv,
+        file_name='student_analysis.csv',
+        mime='text/csv'
+    )
 
-    most_common = df["Category"].value_counts().idxmax()
-    avg_time = round(df["Time"].mean(), 2)
-    avg_conf = round(df["Confidence"].mean(), 2)
 
-    st.markdown(f"""
-    - **Most common thinking pattern:** {most_common}  
-    - **Average time taken:** {avg_time} minutes  
-    - **Average confidence score:** {avg_conf}  
-    """)
+# Functions
 
-    st.subheader(" Interpretation Guide")
-    st.markdown("""
-    - 🟢 Structured Thinker → Clear logical reasoning  
-    - 🟡 Trial-and-Error → Lack of planning  
-    - 🔵 Conceptual Gap → Weak understanding  
-    - 🔴 Overthinking → Inefficient strategy  
-    - 🟣 Execution Error → Minor mistakes despite understanding  
-    """)
+def edit_student(index):
+    student = st.session_state.data[index]
+    st.session_state.edit_index = index
+    st.session_state.student_name = student["Name"]
+    st.session_state.student_steps = student["Steps"]
+    st.session_state.student_answer = student["Final Answer"]
+    st.session_state.student_time = student["Time"]
+    st.experimental_rerun()
 
-else:
-    st.info(" Enter student data from the sidebar to begin analysis.")
+def delete_student(index):
+    st.session_state.data.pop(index)
+    st.experimental_rerun()
